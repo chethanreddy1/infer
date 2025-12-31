@@ -82,7 +82,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *userdata) {
 /* ---------------- MAIN ---------------- */
 
 int main(int argc, char **argv) {
-    if (argc < 2) { fprintf(stderr, "Usage: %s \"prompt\"\n", argv[0]); return 1; }
+    if (argc < 2) { fprintf(stderr, "Usage: %s \"<prompt>\"\n", argv[0]); return 1; }
 
     // Load from Environment Variables
     char *env_url = getenv("INFER_API_URL");
@@ -101,25 +101,55 @@ int main(int argc, char **argv) {
 
     // 1. Prepare Inputs
     char *pipe_in = read_stdin();
-    char *safe_prompt = json_escape(argv[1]);
+
+    // Concatenate all argv[1..] into a single prompt
+    size_t prompt_len = 0;
+    for (int i = 1; i < argc; i++) {
+        prompt_len += strlen(argv[i]) + 1; // space or null
+    }
+
+    char *prompt = malloc(prompt_len + 1);
+    prompt[0] = '\0';
+
+    for (int i = 1; i < argc; i++) {
+        strcat(prompt, argv[i]);
+        if (i < argc - 1) strcat(prompt, " ");
+    }
+
+    char *safe_prompt = json_escape(prompt);
     char *safe_pipe = json_escape(pipe_in);
     
     // 2. Build Payload
-    char *payload_fmt = 
-        "{"
-        "\"model\":\"%s\","
-        "\"stream\":false,"
-        "\"messages\":["
-          "{\"role\":\"system\",\"content\":\"%s\"},"
-          "{\"role\":\"user\",\"content\":\"%s\\n\\nContext:\\n%s\"}"
-        "]"
-        "}";
-
-    // Allocate exact size needed
-    size_t plen = strlen(payload_fmt) + strlen(model) + strlen(SYSTEM_PROMPT) + 
-                  strlen(safe_prompt) + strlen(safe_pipe?safe_pipe:"") + 100;
-    char *payload = malloc(plen);
-    snprintf(payload, plen, payload_fmt, model, SYSTEM_PROMPT, safe_prompt, safe_pipe?safe_pipe:"");
+    char *payload;
+    if (pipe_in && *pipe_in) {
+        char *payload_fmt = 
+            "{"
+            "\"model\":\"%s\","
+            "\"stream\":false,"
+            "\"messages\":["
+              "{\"role\":\"system\",\"content\":\"%s\"},"
+              "{\"role\":\"user\",\"content\":\"%s\\n\\nContext:\\n%s\"}"
+            "]"
+            "}";
+        size_t plen = strlen(payload_fmt) + strlen(model) + strlen(SYSTEM_PROMPT) + 
+                      strlen(safe_prompt) + strlen(safe_pipe) + 100;
+        payload = malloc(plen);
+        snprintf(payload, plen, payload_fmt, model, SYSTEM_PROMPT, safe_prompt, safe_pipe);
+    } else {
+        char *payload_fmt = 
+            "{"
+            "\"model\":\"%s\","
+            "\"stream\":false,"
+            "\"messages\":["
+              "{\"role\":\"system\",\"content\":\"%s\"},"
+              "{\"role\":\"user\",\"content\":\"%s\"}"
+            "]"
+            "}";
+        size_t plen = strlen(payload_fmt) + strlen(model) + strlen(SYSTEM_PROMPT) + 
+                      strlen(safe_prompt) + 100;
+        payload = malloc(plen);
+        snprintf(payload, plen, payload_fmt, model, SYSTEM_PROMPT, safe_prompt);
+    }
 
     // 3. Setup Curl
     struct response chunk = {0};
@@ -163,6 +193,7 @@ int main(int argc, char **argv) {
 
     // Cleanup
     free(pipe_in); free(safe_prompt); free(safe_pipe); free(payload); free(chunk.data);
+    free(prompt);
     curl_easy_cleanup(c);
     return 0;
 }
