@@ -2,6 +2,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <curl/curl.h>
 #include "jsmn.h"
 
@@ -54,6 +55,87 @@ static char* read_stdin() {
     }
     buf[len] = 0;
     return buf;
+}
+
+static int hexval(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+    return -1;
+}
+
+static void emit_utf8(uint32_t cp) {
+    if (cp <= 0x7F) {
+        fputc((int)cp, stdout);
+    } else if (cp <= 0x7FF) {
+        fputc(0xC0 | ((cp >> 6) & 0x1F), stdout);
+        fputc(0x80 | (cp & 0x3F), stdout);
+    } else if (cp <= 0xFFFF) {
+        fputc(0xE0 | ((cp >> 12) & 0x0F), stdout);
+        fputc(0x80 | ((cp >> 6) & 0x3F), stdout);
+        fputc(0x80 | (cp & 0x3F), stdout);
+    } else if (cp <= 0x10FFFF) {
+        fputc(0xF0 | ((cp >> 18) & 0x07), stdout);
+        fputc(0x80 | ((cp >> 12) & 0x3F), stdout);
+        fputc(0x80 | ((cp >> 6) & 0x3F), stdout);
+        fputc(0x80 | (cp & 0x3F), stdout);
+    } else {
+        fputc('?', stdout);
+    }
+}
+
+static void print_json_string_unescaped(const char *s, int len) {
+    int i = 0;
+    while (i < len) {
+        char c = s[i++];
+        if (c != '\\') {
+            fputc(c, stdout);
+            continue;
+        }
+        if (i >= len) { fputc('\\', stdout); break; }
+        char esc = s[i++];
+        switch (esc) {
+            case 'n': fputc('\n', stdout); break;
+            case 'r': fputc('\r', stdout); break;
+            case 't': fputc('\t', stdout); break;
+            case 'b': fputc('\b', stdout); break;
+            case 'f': fputc('\f', stdout); break;
+            case '"': fputc('"', stdout); break;
+            case '\\': fputc('\\', stdout); break;
+            case '/': fputc('/', stdout); break;
+            case 'u': {
+                if (i + 4 > len) { fputc('?', stdout); break; }
+                uint32_t cp = 0;
+                for (int k = 0; k < 4; k++) {
+                    int hv = hexval(s[i + k]);
+                    if (hv < 0) { cp = 0xFFFD; break; }
+                    cp = (cp << 4) | (uint32_t)hv;
+                }
+                i += 4;
+
+                if (cp >= 0xD800 && cp <= 0xDBFF) {
+                    if (i + 6 <= len && s[i] == '\\' && s[i + 1] == 'u') {
+                        uint32_t low = 0;
+                        int ok = 1;
+                        for (int k = 0; k < 4; k++) {
+                            int hv = hexval(s[i + 2 + k]);
+                            if (hv < 0) { ok = 0; break; }
+                            low = (low << 4) | (uint32_t)hv;
+                        }
+                        if (ok && low >= 0xDC00 && low <= 0xDFFF) {
+                            i += 6;
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                        }
+                    }
+                }
+                emit_utf8(cp);
+                break;
+            }
+            default:
+                fputc(esc, stdout);
+                break;
+        }
+    }
 }
 
 /* ---------------- YAML PARSER (REMOVED) ---------------- */
@@ -153,7 +235,8 @@ int main(int argc, char **argv) {
                 
                 // Print the value immediately following "content"
                 jsmntok_t val = tok[i+1];
-                printf("%.*s\n", val.end - val.start, chunk.data + val.start);
+                print_json_string_unescaped(chunk.data + val.start, val.end - val.start);
+                fputc('\n', stdout);
                 break; // Found it, exit
             }
         }
