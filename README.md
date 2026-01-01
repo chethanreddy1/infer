@@ -31,7 +31,7 @@ brew install curl jsmn
 
 ```bash
 # Clone and build
-git clone https://github.com/yourusername/infer.git
+git clone https://github.com/chethanreddy1/infer.git
 cd infer
 gcc -o infer infer.c -lcurl
 
