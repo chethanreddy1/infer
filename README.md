@@ -24,7 +24,7 @@ sudo apt install libcurl4-openssl-dev
 
 On macOS:
 ```bash
-brew install curl jsmn
+brew install curl
 ```
 
 ### Build
