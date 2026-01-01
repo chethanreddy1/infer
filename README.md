@@ -45,17 +45,18 @@ sudo chmod +x /usr/local/bin/infer
 Set environment variables in your shell profile (`~/.bashrc`, `~/.zshrc`, etc):
 
 ```bash
-export INFER_API_URL="https://api.openai.com/v1/chat/completions"
+export INFER_BASE_URL="https://api.openai.com/v1/"
 export INFER_API_KEY="sk-your-api-key-here"
 export INFER_MODEL="gpt-4"
 ```
 
 Works with any OpenAI-compatible API (OpenAI, Anthropic, local llama.cpp servers, etc).
+`INFER_BASE_URL` should point to the `/v1/` base; `infer` appends `chat/completions`.
 
 
 For local llama.cpp:
 ```bash
-export INFER_API_URL="http://localhost:8080/v1/chat/completions"
+export INFER_BASE_URL="http://localhost:8080/v1/"
 export INFER_API_KEY="not-needed"
 export INFER_MODEL="llama-3.2"
 ```
@@ -178,7 +179,7 @@ docker ps | infer "any containers using too much memory?" | tee report.txt
 ## Configuration Lookup
 
 `infer` reads configuration from environment variables:
-- `INFER_API_URL` - API endpoint
+- `INFER_BASE_URL` - Base API URL (ends with `/v1/`; `infer` appends `chat/completions`)
 - `INFER_API_KEY` - Your API key  
 - `INFER_MODEL` - Model name
 

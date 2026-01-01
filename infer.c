@@ -166,18 +166,24 @@ int main(int argc, char **argv) {
     if (argc < 2) { fprintf(stderr, "Usage: %s \"prompt\"\n", argv[0]); return 1; }
 
     // Load from Environment Variables
-    char *env_url = getenv("INFER_API_URL");
+    char *env_url = getenv("INFER_BASE_URL");
     char *env_key = getenv("INFER_API_KEY");
     char *env_model = getenv("INFER_MODEL");
 
-    if (!env_url || !*env_url) {
-        fprintf(stderr, "Error: INFER_API_URL environment variable not set.\n");
+    if (!env_url || !*env_url || !env_key || !*env_key || !env_model || !*env_model) {
+        fprintf(stderr, "Error: missing required environment variables.\n");
+        if (!env_url || !*env_url) fprintf(stderr, "Please set INFER_BASE_URL environment variable.\n");
+        if (!env_key || !*env_key) fprintf(stderr, "Please set INFER_API_KEY environment variable.\n");
+        if (!env_model || !*env_model) fprintf(stderr, "Please set INFER_MODEL environment variable.\n");
         return 1;
     }
 
-    snprintf(api_url, sizeof(api_url), "%s", env_url);
-    if (env_key) snprintf(api_key, sizeof(api_key), "%s", env_key);
-    if (env_model) snprintf(model, sizeof(model), "%s", env_model);
+    const char *path = "chat/completions";
+    size_t base_len = strlen(env_url);
+    int needs_slash = base_len > 0 && env_url[base_len - 1] != '/';
+    snprintf(api_url, sizeof(api_url), "%s%s%s", env_url, needs_slash ? "/" : "", path);
+    snprintf(api_key, sizeof(api_key), "%s", env_key);
+    snprintf(model, sizeof(model), "%s", env_model);
 
     // 1. Prepare Inputs
     char *pipe_in = read_stdin();
